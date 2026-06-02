@@ -252,6 +252,34 @@ func TestRunRejectsCaptchaVerificationPage(t *testing.T) {
 	}
 }
 
+func TestRunRejectsPermissionLimitedPage(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = io.WriteString(w, `<!doctype html><html><head><title>Sina Visitor System</title></head><body>
+<p>你暂无权限查看此页面内容</p>
+</body></html>`)
+	}))
+	defer server.Close()
+
+	workDir := t.TempDir()
+	err := Run(Config{
+		URL:     server.URL + "/limited",
+		Name:    "limited-note",
+		WorkDir: workDir,
+	})
+	if err == nil {
+		t.Fatal("expected permission-limited page to return an error")
+	}
+	if !strings.Contains(err.Error(), "权限") && !strings.Contains(err.Error(), "风控") {
+		t.Fatalf("expected permission or anti-crawler error, got %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(workDir, "limited-note.md")); !os.IsNotExist(statErr) {
+		t.Fatalf("expected markdown not to be written for limited page, stat err: %v", statErr)
+	}
+}
+
 func TestRunBypassesWechatStyleCaptchaWhenBrowserUA(t *testing.T) {
 	t.Parallel()
 

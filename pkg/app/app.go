@@ -20,6 +20,7 @@ type Config struct {
 	WorkDir        string
 	Strict         bool
 	SiteConfigPath string
+	Cookie         string
 }
 
 func Run(config Config) error {
@@ -44,12 +45,12 @@ func Run(config Config) error {
 		return fmt.Errorf("create work dir: %w", err)
 	}
 
-	page, err := fetcher.New(fetcher.ClientConfig{}).Fetch(urlText)
+	page, err := fetcher.New(fetcher.ClientConfig{Cookie: config.Cookie}).Fetch(urlText)
 	if err != nil {
 		return err
 	}
 	if blocked := detectVerificationPage(page.URL, page.Body); blocked {
-		return fmt.Errorf("目标站点触发验证码或环境校验，当前版本不支持自动通过，请在浏览器完成验证后重试")
+		return fmt.Errorf("目标站点触发验证码、权限限制或风控校验，当前版本不支持自动通过，请在浏览器确认页面可公开访问后重试")
 	}
 
 	parsed, err := parsePage(page.URL, page.Body, config.SiteConfigPath)
@@ -134,6 +135,15 @@ func detectVerificationPage(pageURL string, body []byte) bool {
 		return true
 	}
 	if strings.Contains(contentLower, "captcha") && strings.Contains(contentLower, "verify") {
+		return true
+	}
+	if strings.Contains(contentLower, "sina visitor system") {
+		return true
+	}
+	if strings.Contains(string(body), "你暂无权限查看此页面内容") || strings.Contains(string(body), "暂无权限查看") {
+		return true
+	}
+	if strings.Contains(string(body), "作者设置为仅对粉丝可见") {
 		return true
 	}
 

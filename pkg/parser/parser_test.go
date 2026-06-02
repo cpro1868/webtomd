@@ -162,6 +162,78 @@ func TestParseWeChatUsesJSContentAndDataSrc(t *testing.T) {
 	}
 }
 
+func TestParseWeChatImageArticleUsesPicturePageInfo(t *testing.T) {
+	t.Parallel()
+
+	body := []byte(`<!doctype html><html><head><title>fallback title</title></head><body>
+		<h1 id="activity-name">图片文章标题</h1>
+		<div id="js_content">
+			<img src="https://mmbiz.qpic.cn/cover/0?wx_fmt=png">
+			<span class="wx_stream_article_slide_tip_text">向上滑动看下一个</span>
+		</div>
+		<script>
+			window.item_show_type = '8';
+			desc: '第一段\x0a\x0a第二段\x26quot;引用\x26quot;',
+			content_noencode: '第一段\x0a\x0a第二段\x22引用\x22',
+			picture_page_info_list: [
+				{ cdn_url: 'https://mmbiz.qpic.cn/one/0?wx_fmt=png', width: '941' * 1 },
+				{ cdn_url: 'https://mmbiz.qpic.cn/two/0?wx_fmt=jpeg', width: '941' * 1 }
+			],
+		</script>
+	</body></html>`)
+
+	result, err := Parse("https://mp.weixin.qq.com/s/example", body)
+	if err != nil {
+		t.Fatalf("parse wechat image article should not fail: %v", err)
+	}
+	if !result.HasContent {
+		t.Fatal("expected image article content to be extracted")
+	}
+	if !strings.Contains(result.HTML, "<p>第一段</p>") || !strings.Contains(result.HTML, "<p>第二段&#34;引用&#34;</p>") {
+		t.Fatalf("expected decoded script text in html, got %q", result.HTML)
+	}
+	if !strings.Contains(result.HTML, `src="https://mmbiz.qpic.cn/one/0?wx_fmt=png"`) ||
+		!strings.Contains(result.HTML, `src="https://mmbiz.qpic.cn/two/0?wx_fmt=jpeg"`) {
+		t.Fatalf("expected all picture-page images in html, got %q", result.HTML)
+	}
+	if len(result.Resources) != 2 {
+		t.Fatalf("expected two image resources, got %#v", result.Resources)
+	}
+}
+
+func TestParseWeChatImageArticleDoesNotRequireJSContent(t *testing.T) {
+	t.Parallel()
+
+	body := []byte(`<!doctype html><html><head>
+		<meta property="og:title" content="图片文章标题" />
+	</head><body>
+		<div id="js_content_container">
+			<span class="wx_stream_article_slide_tip_text">向上滑动看下一个</span>
+		</div>
+		<script>
+			item_show_type: '8' * 1,
+			content_noencode: '正文摘要',
+			picture_page_info_list: [
+				{ cdn_url: 'https://mmbiz.qpic.cn/one/0?wx_fmt=png' }
+			],
+		</script>
+	</body></html>`)
+
+	result, err := Parse("https://mp.weixin.qq.com/s/example", body)
+	if err != nil {
+		t.Fatalf("parse wechat image article should not fail: %v", err)
+	}
+	if !result.HasContent {
+		t.Fatal("expected image article content")
+	}
+	if result.Title != "图片文章标题" {
+		t.Fatalf("unexpected title: %q", result.Title)
+	}
+	if !strings.Contains(result.HTML, "正文摘要") || !strings.Contains(result.HTML, `src="https://mmbiz.qpic.cn/one/0?wx_fmt=png"`) {
+		t.Fatalf("unexpected html: %q", result.HTML)
+	}
+}
+
 func TestRewriteResourcesHandlesFragmentInput(t *testing.T) {
 	t.Parallel()
 

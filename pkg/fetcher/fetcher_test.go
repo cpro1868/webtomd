@@ -69,3 +69,38 @@ func TestFetchRejectsNotFound(t *testing.T) {
 		t.Fatalf("expected friendly error message, got %q", err.Error())
 	}
 }
+
+func TestFetchSendsConfiguredCookie(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Cookie") != "SUB=abc; SUBP=def" {
+			http.Error(w, "missing cookie", http.StatusForbidden)
+			return
+		}
+		_, _ = io.WriteString(w, "cookie ok")
+	}))
+	defer server.Close()
+
+	client := New(ClientConfig{Timeout: time.Second, Cookie: "SUB=abc; SUBP=def"})
+	page, err := client.Fetch(server.URL)
+	if err != nil {
+		t.Fatalf("fetch should succeed with configured cookie: %v", err)
+	}
+	if string(page.Body) != "cookie ok" {
+		t.Fatalf("unexpected body: %q", string(page.Body))
+	}
+}
+
+func TestCandidateURLsForWeiboArticleIncludesMobileFallback(t *testing.T) {
+	t.Parallel()
+
+	candidates := candidateURLsForURL("https://weibo.com/ttarticle/x/m/show/id/2309405303156245659656")
+	want := "https://m.weibo.cn/status/5303156245659656"
+	for _, candidate := range candidates {
+		if candidate == want {
+			return
+		}
+	}
+	t.Fatalf("expected mobile fallback %q in candidates %#v", want, candidates)
+}

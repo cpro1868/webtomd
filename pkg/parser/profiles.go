@@ -16,6 +16,7 @@ var builtinProfiles = []SiteProfile{
 	weChatProfile{},
 	notionProfile{},
 	nyTimesCNProfile{},
+	weiboArticleProfile{},
 }
 
 func trySiteProfiles(baseURL *url.URL, body []byte) (Result, bool, error) {

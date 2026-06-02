@@ -520,3 +520,36 @@
 - Verification:
   - `go test ./...`
   - `go build -o web2md.exe .`
+
+### WeChat Image Articles and Weibo Anti-Crawler Handling
+
+- User reported:
+  - WeChat image article `https://mp.weixin.qq.com/s/Jq_1sn9GhkHljPM5bhdg2g` exported only the cover and "向上滑动看下一个".
+  - Weibo long article `https://weibo.com/ttarticle/x/m/show/id/2309405303156245659656` failed to fetch.
+  - Some pages return "你暂无权限查看此页面内容".
+- WeChat root cause:
+  - this sample is `item_show_type=8`, a swipe/image article.
+  - the traditional `#js_content` article body is not the full content; useful text and images are stored in script fields such as `content_noencode` and `picture_page_info_list`.
+- WeChat fix:
+  - `weChatProfile` now detects image articles before requiring `#js_content`.
+  - it extracts text from script content and image URLs from `picture_page_info_list`.
+  - it still uses the existing `#js_content` path for normal articles.
+- Weibo/permission handling:
+  - added a static Weibo article profile for pages that do return article HTML.
+  - fetcher now uses a cookie jar, fuller browser-like headers, gzip handling, short retries, and mobile UA/candidate URL fallback for Weibo article URLs.
+  - added `--cookie` so pages that are visible in a user's browser session can reuse copied site cookies for the current command.
+  - app-level blocking detection now recognizes Sina Visitor System and "暂无权限查看" style pages and returns a clear error instead of writing misleading Markdown.
+- Real verification:
+  - the WeChat sample now exports the description text and 7 local image links.
+  - the Weibo sample currently returns Sina Visitor/permission gating without public article HTML, so the CLI reports a clear anti-crawler/permission error and does not write output.
+
+### Weibo Empty Article Fallback Guard
+
+- User reported Weibo article `https://weibo.com/ttarticle/x/m/show/id/2309405303156245659656` could export as only a simple original-link fallback.
+- Root cause:
+  - when a Weibo article-like URL returned an app shell without extractable article HTML, the Weibo profile did not claim the page.
+  - parsing then fell through to the generic empty-content fallback.
+- Fix:
+  - Weibo article-like URLs (`ttarticle`, `/article/`, `/status/`) now return an explicit error if no article body is present.
+  - the error points to `--cookie` for browser-session pages or reports permission/anti-crawler restriction.
+  - added regression coverage so empty Weibo shells no longer generate fallback-only Markdown.

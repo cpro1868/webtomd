@@ -40,6 +40,9 @@ func TestRootHelpMentionsStrict(t *testing.T) {
 	if !strings.Contains(stdout.String(), "--site-config") {
 		t.Fatalf("expected help to mention site config, got %q", stdout.String())
 	}
+	if !strings.Contains(stdout.String(), "--cookie") {
+		t.Fatalf("expected help to mention cookie, got %q", stdout.String())
+	}
 }
 
 func TestRootRunsWithName(t *testing.T) {
@@ -57,12 +60,15 @@ func TestRootRunsWithName(t *testing.T) {
 		if opts.SiteConfigPath != "sites.json" {
 			t.Fatalf("unexpected site config path: %q", opts.SiteConfigPath)
 		}
+		if opts.Cookie != "SUB=abc" {
+			t.Fatalf("unexpected cookie: %q", opts.Cookie)
+		}
 		if url != "https://example.com/article" {
 			t.Fatalf("unexpected url: %q", url)
 		}
 		return nil
 	})
-	root.SetArgs([]string{"https://example.com/article", "-n", "article-note", "--strict", "--site-config", "sites.json"})
+	root.SetArgs([]string{"https://example.com/article", "-n", "article-note", "--strict", "--site-config", "sites.json", "--cookie", "SUB=abc"})
 
 	err := root.Execute()
 	if err != nil {
