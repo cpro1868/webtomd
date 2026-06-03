@@ -4,6 +4,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -103,4 +105,64 @@ func TestCandidateURLsForWeiboArticleIncludesMobileFallback(t *testing.T) {
 		}
 	}
 	t.Fatalf("expected mobile fallback %q in candidates %#v", want, candidates)
+}
+
+func TestWeiboArticleIDFromURL(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]string{
+		"https://weibo.com/ttarticle/x/m/show/id/2309405303156245659656":  "5303156245659656",
+		"https://card.weibo.com/article/m/show/id/2309405303156245659656": "5303156245659656",
+		"https://m.weibo.cn/status/5303156245659656":                      "5303156245659656",
+		"https://example.com/status/5303156245659656":                     "",
+	}
+	for input, want := range tests {
+		if got := weiboArticleIDFromURL(input); got != want {
+			t.Fatalf("weiboArticleIDFromURL(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
+func TestExtractWeiboLongText(t *testing.T) {
+	t.Parallel()
+
+	body := []byte(`{"ok":1,"data":{"longTextContent":"<p>正文内容</p>"}}`)
+	if got := extractWeiboLongText(body); got != "<p>正文内容</p>" {
+		t.Fatalf("unexpected long text: %q", got)
+	}
+}
+
+func TestExtractStringFieldFromJSONP(t *testing.T) {
+	t.Parallel()
+
+	body := []byte(`gen_callback({"retcode":20000000,"data":{"tid":"visitor-tid"}})`)
+	if got := extractStringFieldFromJSONP(body, "tid"); got != "visitor-tid" {
+		t.Fatalf("unexpected tid: %q", got)
+	}
+}
+
+func TestCopyBrowserSessionCopiesCookiesToTemporaryDefaultProfile(t *testing.T) {
+	sourceRoot := t.TempDir()
+	sourceProfile := filepath.Join(sourceRoot, "Default")
+	if err := os.MkdirAll(filepath.Join(sourceProfile, "Network"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceRoot, "Local State"), []byte("local-state"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceProfile, "Network", "Cookies"), []byte("cookies"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	targetRoot := t.TempDir()
+	t.Setenv("WEB2MD_BROWSER_USER_DATA_DIR", sourceRoot)
+	t.Setenv("WEB2MD_BROWSER_PROFILE_DIR", "")
+	t.Setenv("LOCALAPPDATA", "")
+
+	if err := copyBrowserSession(targetRoot, ""); err != nil {
+		t.Fatalf("copyBrowserSession failed: %v", err)
+	}
+	if got, err := os.ReadFile(filepath.Join(targetRoot, "Default", "Network", "Cookies")); err != nil || string(got) != "cookies" {
+		t.Fatalf("unexpected copied cookies: %q, %v", string(got), err)
+	}
 }

@@ -553,3 +553,18 @@
   - Weibo article-like URLs (`ttarticle`, `/article/`, `/status/`) now return an explicit error if no article body is present.
   - the error points to `--cookie` for browser-session pages or reports permission/anti-crawler restriction.
   - added regression coverage so empty Weibo shells no longer generate fallback-only Markdown.
+
+### Weibo Browser Session Fallback
+
+- User reported that Weibo pages visible in a normal browser still failed in the CLI and that requiring manual Cookie copying is unreasonable.
+- Changes:
+  - added Weibo long-text API fallback with automatic Sina Visitor bootstrap before browser rendering.
+  - added Chrome/Edge DevTools rendering fallback for Weibo and WeChat blocked pages.
+  - browser fallback now copies `Local State` and Cookie files from a Chrome/Edge Profile into a temporary Profile before rendering, so the original browser data is not modified.
+  - added `--browser-profile` and environment support (`WEB2MD_BROWSER_PROFILE_DIR`, `WEB2MD_BROWSER_USER_DATA_DIR`) for explicit Profile selection.
+  - kept `--cookie` as a last-resort manual option.
+- Verification:
+  - `go test ./...`
+  - `go build -o web2md.exe .`
+  - WeChat sample `https://mp.weixin.qq.com/s/iVHL-4Eh7IXgdB_7BfJPsQ` exports normally in this environment.
+  - Weibo sample still returns a clear anti-crawler error on this machine because no reusable Weibo browser session is available and `passport.weibo.com` TLS fails locally; with a valid local browser Profile, the fallback now has a no-manual-cookie path.

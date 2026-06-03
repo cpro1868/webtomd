@@ -78,6 +78,7 @@ web2md "<URL>" -n note
 web2md "<URL>" -n note --strict
 web2md "<URL>" -n note --site-config examples/sites.example.json
 web2md "<URL>" -n note --cookie "SUB=xxx; SUBP=yyy"
+web2md "<URL>" -n note --browser-profile "$env:LOCALAPPDATA\Google\Chrome\User Data\Default"
 go run . "<URL>" -n note
 ```
 
@@ -88,6 +89,7 @@ go run . "<URL>" -n note
 - `--strict`：可选，资源下载失败时立即返回错误。
 - `--site-config`：可选，引用站点扩展规则 JSON 文件，自定义特殊网站的标题、正文、清理和媒体属性选择器。
 - `--cookie`：可选，请求页面时附加 Cookie。适合浏览器能打开、CLI 直接访问会触发登录态或权限校验的页面。
+- `--browser-profile`：可选，指定 Chrome/Edge Profile 目录。程序会复制会话文件到临时目录后渲染页面，不会修改原始 Profile。
 
 ## 微信公众号说明
 
@@ -97,17 +99,25 @@ go run . "<URL>" -n note
 - 如果网络不稳定，微信页面可能出现 `unexpected EOF` 或超时，重新执行通常可恢复。
 - 当前版本不支持登录态、浏览器渲染、扫码验证或付费/受限文章。
 
-## 受限页面与 Cookie
+## 受限页面、浏览器 Profile 与 Cookie
 
 部分站点会返回 Visitor System、验证码页或“暂无权限查看”。程序会识别这类页面并停止写入 Markdown，避免把风控页当正文保存。
 
-如果目标页面在浏览器中可正常打开，可以从浏览器开发者工具复制该站点 Cookie，并传给程序：
+如果目标页面在浏览器中可正常打开，优先使用浏览器 Profile 方式：
+
+```powershell
+web2md "<URL>" -n note --browser-profile "$env:LOCALAPPDATA\Google\Chrome\User Data\Default"
+```
+
+程序会把 `Local State` 和 Cookie 数据库复制到临时 Profile，再用 Chrome/Edge 渲染页面；原浏览器数据不会被写入。也可以通过环境变量 `WEB2MD_BROWSER_PROFILE_DIR` 指定同一路径。
+
+如果 Profile 方式仍不稳定，再从浏览器开发者工具复制该站点 Cookie，并传给程序：
 
 ```powershell
 web2md "<URL>" -n note --cookie "SUB=xxx; SUBP=yyy"
 ```
 
-Cookie 只用于当前命令，不会保存到配置文件。需要浏览器执行 JavaScript 指纹、验证码、扫码或付费授权的页面仍不支持自动通过。
+Cookie 只用于当前命令，不会保存到配置文件。验证码、扫码或付费授权页面仍不支持自动通过。
 
 ## Notion 页面说明
 

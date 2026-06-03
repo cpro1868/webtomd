@@ -52,7 +52,7 @@ func TestWeiboArticleProfileRejectsArticleShellWithoutContent(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected empty weibo article shell to fail")
 	}
-	if !strings.Contains(err.Error(), "微博") || !strings.Contains(err.Error(), "--cookie") {
+	if !strings.Contains(err.Error(), "微博") || !strings.Contains(err.Error(), "--browser-profile") {
 		t.Fatalf("expected weibo cookie guidance error, got %v", err)
 	}
 }

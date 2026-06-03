@@ -15,6 +15,7 @@ type Options struct {
 	Strict         bool
 	SiteConfigPath string
 	Cookie         string
+	BrowserProfile string
 }
 
 type Runner func(opts Options, url string) error
@@ -33,6 +34,7 @@ func NewRootCommand(stdout, stderr io.Writer) *cobra.Command {
 			Strict:         opts.Strict,
 			SiteConfigPath: opts.SiteConfigPath,
 			Cookie:         opts.Cookie,
+			BrowserProfile: opts.BrowserProfile,
 		})
 	})
 }
@@ -60,5 +62,6 @@ func NewRootCommandWithRunner(stdout, stderr io.Writer, runner Runner) *cobra.Co
 	cmd.Flags().BoolVar(&opts.Strict, "strict", false, "资源下载失败时立即返回错误")
 	cmd.Flags().StringVar(&opts.SiteConfigPath, "site-config", "", "站点扩展规则 JSON 文件路径")
 	cmd.Flags().StringVar(&opts.Cookie, "cookie", "", "请求页面时附加的 Cookie，例如浏览器中复制的 SUB=...; SUBP=...")
+	cmd.Flags().StringVar(&opts.BrowserProfile, "browser-profile", "", "浏览器 Profile 目录，用于复制会话后渲染受风控页面")
 	return cmd
 }

@@ -13,7 +13,7 @@ type weiboArticleProfile struct{}
 
 func (weiboArticleProfile) Match(baseURL *url.URL) bool {
 	host := strings.ToLower(baseURL.Hostname())
-	return host == "weibo.com" || host == "www.weibo.com" || host == "card.weibo.com"
+	return host == "weibo.com" || host == "www.weibo.com" || host == "card.weibo.com" || host == "m.weibo.cn"
 }
 
 func (weiboArticleProfile) Parse(baseURL *url.URL, body []byte) (Result, bool, error) {
@@ -31,7 +31,7 @@ func (weiboArticleProfile) Parse(baseURL *url.URL, body []byte) (Result, bool, e
 	})
 	if content == nil || content.Length() == 0 {
 		if isWeiboArticleLikeURL(baseURL) {
-			return Result{}, false, fmt.Errorf("微博页面未返回可提取正文，可能需要使用 --cookie 提供浏览器登录态，或该页面被权限/风控限制")
+			return Result{}, false, fmt.Errorf("微博页面未返回可提取正文，可能需要使用 --browser-profile 复用浏览器会话，或最后使用 --cookie")
 		}
 		return Result{}, false, nil
 	}

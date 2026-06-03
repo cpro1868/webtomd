@@ -21,6 +21,7 @@ type Config struct {
 	Strict         bool
 	SiteConfigPath string
 	Cookie         string
+	BrowserProfile string
 }
 
 func Run(config Config) error {
@@ -45,12 +46,21 @@ func Run(config Config) error {
 		return fmt.Errorf("create work dir: %w", err)
 	}
 
-	page, err := fetcher.New(fetcher.ClientConfig{Cookie: config.Cookie}).Fetch(urlText)
+	page, err := fetcher.New(fetcher.ClientConfig{Cookie: config.Cookie, BrowserProfileDir: config.BrowserProfile}).Fetch(urlText)
 	if err != nil {
 		return err
 	}
 	if blocked := detectVerificationPage(page.URL, page.Body); blocked {
-		return fmt.Errorf("目标站点触发验证码、权限限制或风控校验，当前版本不支持自动通过，请在浏览器确认页面可公开访问后重试")
+		if apiPage, apiErr := fetcher.FetchWeiboArticleAPI(urlText); apiErr == nil && !detectVerificationPage(apiPage.URL, apiPage.Body) {
+			page = apiPage
+		} else {
+			browserPage, browserErr := fetcher.FetchWithBrowser(urlText, config.BrowserProfile)
+			if browserErr == nil && !detectVerificationPage(browserPage.URL, browserPage.Body) {
+				page = browserPage
+			} else {
+				return fmt.Errorf("目标站点触发验证码、权限限制或风控校验，未返回可提取正文；如果浏览器能访问，请使用 --browser-profile 指定浏览器 Profile，或最后使用 --cookie")
+			}
+		}
 	}
 
 	parsed, err := parsePage(page.URL, page.Body, config.SiteConfigPath)

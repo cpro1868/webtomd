@@ -11,6 +11,7 @@ Site configuration reference: [docs/site_config.md](docs/site_config.md). 中文
 ```bash
 web2md <URL> -n <document-name>
 web2md <URL> -n <document-name> --strict
+web2md <URL> -n <document-name> --browser-profile "%LOCALAPPDATA%\\Google\\Chrome\\User Data\\Default"
 ```
 
 Output is written to the current directory:
@@ -19,6 +20,8 @@ Output is written to the current directory:
 - `assets/`
 
 Default mode keeps original remote URLs when media download fails. `--strict` exits non-zero when any media download fails and preserves existing files.
+
+For pages that are visible in your browser but blocked by direct HTTP fetching, use `--browser-profile` to render with a copied Chrome/Edge profile session. The original browser profile is not modified.
 
 ## Development
 
