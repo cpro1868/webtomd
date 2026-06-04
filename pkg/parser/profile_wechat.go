@@ -44,16 +44,7 @@ func (weChatProfile) Parse(baseURL *url.URL, body []byte) (Result, bool, error) 
 		return Result{}, false, nil
 	}
 
-	content.Find("script, style").Each(func(_ int, selection *goquery.Selection) {
-		selection.Remove()
-	})
-	content.Find("img[data-src]").Each(func(_ int, selection *goquery.Selection) {
-		dataSrc, ok := selection.Attr("data-src")
-		dataSrc = strings.TrimSpace(dataSrc)
-		if ok && dataSrc != "" {
-			selection.SetAttr("src", dataSrc)
-		}
-	})
+	cleanWeChatContent(content)
 
 	html, err := content.Html()
 	if err != nil {
@@ -86,6 +77,55 @@ func (weChatProfile) Parse(baseURL *url.URL, body []byte) (Result, bool, error) 
 	}, true, nil
 }
 
+func cleanWeChatContent(content *goquery.Selection) {
+	content.Find("script, style, noscript, mp-style-type, [style*='display: none'], [style*='display:none']").Each(func(_ int, selection *goquery.Selection) {
+		selection.Remove()
+	})
+	content.Find("img[data-src]").Each(func(_ int, selection *goquery.Selection) {
+		dataSrc, ok := selection.Attr("data-src")
+		dataSrc = strings.TrimSpace(dataSrc)
+		if ok && dataSrc != "" {
+			selection.SetAttr("src", dataSrc)
+		}
+	})
+	content.Find("*").Each(func(_ int, selection *goquery.Selection) {
+		keepSafeMarkdownAttrs(selection)
+	})
+}
+
+func keepSafeMarkdownAttrs(selection *goquery.Selection) {
+	node := selection.Get(0)
+	if node == nil {
+		return
+	}
+
+	allowed := allowedAttrsForTag(goquery.NodeName(selection))
+	filtered := node.Attr[:0]
+	for _, attr := range node.Attr {
+		if allowed[strings.ToLower(attr.Key)] {
+			filtered = append(filtered, attr)
+		}
+	}
+	node.Attr = filtered
+}
+
+func allowedAttrsForTag(tag string) map[string]bool {
+	switch strings.ToLower(tag) {
+	case "a":
+		return map[string]bool{"href": true, "title": true}
+	case "img":
+		return map[string]bool{"src": true, "alt": true, "title": true}
+	case "video":
+		return map[string]bool{"src": true, "poster": true, "controls": true}
+	case "source":
+		return map[string]bool{"src": true, "type": true}
+	case "td", "th":
+		return map[string]bool{"colspan": true, "rowspan": true}
+	default:
+		return map[string]bool{}
+	}
+}
+
 func isWeChatImageArticle(body []byte, doc *goquery.Document) bool {
 	bodyText := string(body)
 	if !strings.Contains(bodyText, "picture_page_info_list") {
@@ -99,19 +139,30 @@ func isWeChatImageArticle(body []byte, doc *goquery.Document) bool {
 
 func parseWeChatImageArticle(baseURL *url.URL, doc *goquery.Document, body []byte) (Result, bool, error) {
 	bodyText := string(body)
-	paragraphs := extractWeChatScriptParagraphs(bodyText)
+	scriptContent := strings.TrimSpace(extractWeChatScriptContent(bodyText))
 	images := extractWeChatPictureURLs(bodyText)
-	if len(paragraphs) == 0 && len(images) == 0 {
+	if scriptContent == "" && len(images) == 0 {
 		return Result{}, false, nil
 	}
 
 	var builder strings.Builder
-	for _, paragraph := range paragraphs {
-		builder.WriteString("<p>")
-		builder.WriteString(html.EscapeString(paragraph))
-		builder.WriteString("</p>")
+	if looksLikeHTMLFragment(scriptContent) {
+		cleanedHTML, err := cleanWeChatHTMLFragment(scriptContent)
+		if err != nil {
+			return Result{}, false, err
+		}
+		builder.WriteString(cleanedHTML)
+	} else {
+		for _, paragraph := range splitWeChatScriptParagraphs(scriptContent) {
+			builder.WriteString("<p>")
+			builder.WriteString(html.EscapeString(paragraph))
+			builder.WriteString("</p>")
+		}
 	}
 	for _, imageURL := range images {
+		if strings.Contains(builder.String(), imageURL) {
+			continue
+		}
 		builder.WriteString(`<p><img src="`)
 		builder.WriteString(html.EscapeString(imageURL))
 		builder.WriteString(`" alt=""></p>`)
@@ -143,12 +194,16 @@ func parseWeChatImageArticle(baseURL *url.URL, doc *goquery.Document, body []byt
 	}, true, nil
 }
 
-func extractWeChatScriptParagraphs(bodyText string) []string {
+func extractWeChatScriptContent(bodyText string) string {
 	raw := firstWeChatScriptString(bodyText, weChatContentNoEncodePattern)
 	if raw == "" {
 		raw = firstWeChatScriptString(bodyText, weChatDescPattern)
 	}
-	decoded := strings.TrimSpace(decodeWeChatScriptString(raw))
+	return strings.TrimSpace(decodeWeChatScriptString(raw))
+}
+
+func splitWeChatScriptParagraphs(decoded string) []string {
+	decoded = strings.TrimSpace(decoded)
 	if decoded == "" {
 		return nil
 	}
@@ -161,6 +216,30 @@ func extractWeChatScriptParagraphs(bodyText string) []string {
 		}
 	}
 	return paragraphs
+}
+
+func looksLikeHTMLFragment(value string) bool {
+	lower := strings.ToLower(value)
+	for _, marker := range []string{"<p", "<section", "<div", "<h1", "<h2", "<h3", "<figure", "<img"} {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func cleanWeChatHTMLFragment(fragment string) (string, error) {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(`<div id="web2md-root">` + fragment + `</div>`))
+	if err != nil {
+		return "", fmt.Errorf("parse wechat script HTML: %w", err)
+	}
+	root := doc.Find("#web2md-root").First()
+	cleanWeChatContent(root)
+	html, err := root.Html()
+	if err != nil {
+		return "", fmt.Errorf("render wechat script HTML: %w", err)
+	}
+	return strings.TrimSpace(html), nil
 }
 
 func firstWeChatScriptString(bodyText string, pattern *regexp.Regexp) string {

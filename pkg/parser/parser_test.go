@@ -6,6 +6,9 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
+
+	"webtomd/pkg/converter"
 )
 
 func TestParseExtractsArticleMedia(t *testing.T) {
@@ -162,6 +165,51 @@ func TestParseWeChatUsesJSContentAndDataSrc(t *testing.T) {
 	}
 }
 
+func TestParseWeChatCleansStyledArticleHTMLForMarkdown(t *testing.T) {
+	t.Parallel()
+
+	body := []byte(`<!doctype html><html><head><title>fallback title</title></head><body>
+		<h1 id="activity-name">微信样式标题</h1>
+		<div id="js_content">
+			<h3 data-first-child="" style="font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue"; color: rgb(25, 27, 31);"><span leaf="">一、</span></h3>
+			<p data-pid="abc" style="margin: 1.4em 0px;"><span leaf=""><span textstyle="" style="font-size: 17px;">第一段正文。</span></span></p>
+			<figure data-size="normal" style="margin: 1.4em 0px;"><section nodeleaf=""><img data-src="https://mmbiz.qpic.cn/cover/640?wx_fmt=jpeg" data-type="jpeg" style="width: 654px;"></section><figcaption style="text-align:center;"><span leaf="">图片说明</span></figcaption></figure>
+			<p style="display: none;"><mp-style-type data-value="3"></mp-style-type></p>
+		</div>
+	</body></html>`)
+
+	result, err := Parse("https://mp.weixin.qq.com/s/example", body)
+	if err != nil {
+		t.Fatalf("parse wechat should not fail: %v", err)
+	}
+	if !result.HasContent {
+		t.Fatal("expected wechat content")
+	}
+	if strings.Contains(result.HTML, "style=") || strings.Contains(result.HTML, "data-pid") || strings.Contains(result.HTML, "data-first-child") {
+		t.Fatalf("expected cleaned wechat html, got %q", result.HTML)
+	}
+	if !strings.Contains(result.HTML, `src="https://mmbiz.qpic.cn/cover/640?wx_fmt=jpeg"`) {
+		t.Fatalf("expected data-src promoted to src, got %q", result.HTML)
+	}
+
+	markdown, err := converter.Convert(converter.Document{
+		OriginalURL: "https://mp.weixin.qq.com/s/example",
+		FetchDate:   time.Date(2026, 6, 4, 0, 0, 0, 0, time.Local),
+		Title:       result.Title,
+		HTML:        result.HTML,
+		HasContent:  result.HasContent,
+	})
+	if err != nil {
+		t.Fatalf("convert should not fail: %v", err)
+	}
+	if strings.Contains(markdown, "<h3") || strings.Contains(markdown, "<p") || strings.Contains(markdown, "style=") {
+		t.Fatalf("expected markdown conversion without raw styled HTML, got %q", markdown)
+	}
+	if !strings.Contains(markdown, "### 一、") || !strings.Contains(markdown, "第一段正文。") {
+		t.Fatalf("expected markdown headings and body text, got %q", markdown)
+	}
+}
+
 func TestParseWeChatImageArticleUsesPicturePageInfo(t *testing.T) {
 	t.Parallel()
 
@@ -198,6 +246,42 @@ func TestParseWeChatImageArticleUsesPicturePageInfo(t *testing.T) {
 	}
 	if len(result.Resources) != 2 {
 		t.Fatalf("expected two image resources, got %#v", result.Resources)
+	}
+}
+
+func TestParseWeChatImageArticleCleansHTMLContentNoEncode(t *testing.T) {
+	t.Parallel()
+
+	body := []byte(`<!doctype html><html><head>
+		<meta property="og:title" content="脚本 HTML 标题" />
+	</head><body>
+		<div id="js_content">
+			<span class="wx_stream_article_slide_tip_text">向上滑动看下一个</span>
+		</div>
+		<script>
+			item_show_type: '8' * 1,
+			content_noencode: '<h3 style="font-family: &quot;Helvetica Neue&quot;;" data-first-child=""><span leaf="">一、</span></h3><p data-pid="p1" style="margin: 1em;"><span leaf="">正文段落</span></p><p style="display: none;"><mp-style-type data-value="3"></mp-style-type></p><img data-src="https://mmbiz.qpic.cn/one/0?wx_fmt=png" style="width: 100px;">',
+			picture_page_info_list: [
+				{ cdn_url: 'https://mmbiz.qpic.cn/one/0?wx_fmt=png' }
+			],
+		</script>
+	</body></html>`)
+
+	result, err := Parse("https://mp.weixin.qq.com/s/example", body)
+	if err != nil {
+		t.Fatalf("parse wechat image article should not fail: %v", err)
+	}
+	if !result.HasContent {
+		t.Fatal("expected image article content")
+	}
+	if strings.Contains(result.HTML, "style=") || strings.Contains(result.HTML, "data-first-child") || strings.Contains(result.HTML, "data-pid") {
+		t.Fatalf("expected cleaned html, got %q", result.HTML)
+	}
+	if !strings.Contains(result.HTML, "<h3><span>一、</span></h3>") || !strings.Contains(result.HTML, "正文段落") {
+		t.Fatalf("expected cleaned heading and paragraph, got %q", result.HTML)
+	}
+	if strings.Count(result.HTML, "https://mmbiz.qpic.cn/one/0?wx_fmt=png") != 1 {
+		t.Fatalf("expected image URL only once, got %q", result.HTML)
 	}
 }
 

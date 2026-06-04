@@ -568,3 +568,19 @@
   - `go build -o web2md.exe .`
   - WeChat sample `https://mp.weixin.qq.com/s/iVHL-4Eh7IXgdB_7BfJPsQ` exports normally in this environment.
   - Weibo sample still returns a clear anti-crawler error on this machine because no reusable Weibo browser session is available and `passport.weibo.com` TLS fails locally; with a valid local browser Profile, the fallback now has a no-manual-cookie path.
+
+### WeChat Script HTML Markdown Regression
+
+- User reported that `https://mp.weixin.qq.com/s/w2mCh8LRe14HL3KFbyBbrQ` exported large raw HTML blocks, and that adding `--browser-profile` did not produce Markdown.
+- Root cause:
+  - the page was routed through the WeChat image/script article path.
+  - `content_noencode` contained full styled HTML, but the parser treated it as plain text, so the Markdown converter later emitted raw HTML.
+- Fix:
+  - WeChat script articles now detect HTML fragments in `content_noencode`.
+  - HTML script content is parsed and cleaned before conversion, removing inline styles, `data-*` attributes, hidden style markers, and preserving only safe link/media/table attributes.
+  - normal text-only image articles still use the old paragraph path.
+- Verification:
+  - added parser regression coverage for styled WeChat HTML in `content_noencode`.
+  - `go test ./...`
+  - `go build -o web2md.exe .`
+  - real-link runs with and without `--browser-profile` now output headings and paragraphs as Markdown, without raw `<h3 ...>`/`style=` blocks.
